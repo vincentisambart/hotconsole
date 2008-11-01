@@ -1,0 +1,8 @@
+:name: MacIrb
+:load: lib/application.rb
+:version: "1.0"
+:icon: resources/HotCocoa.icns
+:resources:
+  - resources/**/*.*
+:sources: 
+  - lib/**/*.rb
