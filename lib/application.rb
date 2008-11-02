@@ -2,10 +2,10 @@ require 'hotcocoa'
 framework 'webkit'
 
 # TODO:
-# - autoscroll
-# - stdout/stderr, later stdin
-# - wraps too long text
-# - allows Alt+Return
+# - stdin
+# - wrap too long text
+# - history (up/down or maybe alt+up/alt+down)
+# - copy/paste
 class Application
   include HotCocoa
 
@@ -18,7 +18,8 @@ class Application
       str.length
     end
     def puts(str)
-      write("#{str}\n")
+      write str
+      write "\n"
       nil
     end
   end
@@ -48,6 +49,7 @@ class Application
       app.delegate = self
 
       window :frame => [100, 100, 900, 500], :title => "MacIrb" do |win|
+        @win = win
         win.will_close { exit }
         win.contentView.margin = 0
         @web_view = web_view(:layout => {:expand => [:width, :height]})
@@ -60,7 +62,9 @@ class Application
   end
   
   def webView view, didFinishLoadForFrame: frame
-    $stdout = Writer.new(self)
+    writer = Writer.new(self)
+    $stdout = writer
+    #$stderr = writer # for debugging it may be better to disable this (and look in Console.app)
     write_prompt
   end
   
@@ -72,14 +76,14 @@ class Application
     document.getElementById('command_line')
   end
   
-  def webView webView, shouldInsertText: text, replacingDOMRange: range, givenAction: action
-    if text == ?\n
-      perform_action
-      false
-    else
-      true
-    end
-  end
+#  def webView webView, shouldInsertText: text, replacingDOMRange: range, givenAction: action
+#    if text == ?\n
+#      perform_action
+#      false
+#    else
+#      true
+#    end
+#  end
   
   def add_div(text)
     doc = document
@@ -98,29 +102,50 @@ class Application
     write_element(span)
   end
 
-  def write_prompt
-    table = document.createElement('table')
-    row = table.insertRow(0)
-    prompt = row.insertCell(-1)
-    prompt.innerText = '>>'
-    typed_text = row.insertCell(-1)
-    if command_line
-      command_line.setAttribute('contentEditable', value: nil)
-      command_line.setAttribute('id', value: nil)
-    end
-    typed_text.setAttribute('contentEditable', value: 'true')
-    typed_text.setAttribute('id', value: 'command_line')
-    typed_text.setAttribute('style', value: 'width: 100%;')
-    write_element(table)
-    command_line.focus
-  end
-  
   def scroll_to_bottom
     body = document.body
     body.scrollTop = body.scrollHeight
     @web_view.setNeedsDisplay true
   end
 
+  def write_prompt
+    if command_line
+      command_line.setAttribute('contentEditable', value: nil)
+      command_line.setAttribute('id', value: nil)
+    end
+
+    table = document.createElement('table')
+    row = table.insertRow(0)
+    prompt = row.insertCell(-1)
+    prompt.setAttribute('style', value: 'vertical-align: top;')
+    prompt.innerText = '>>'
+    typed_text = row.insertCell(-1)
+    typed_text.setAttribute('contentEditable', value: 'true')
+    typed_text.setAttribute('id', value: 'command_line')
+    typed_text.setAttribute('style', value: 'width: 100%;')
+    write_element(table)
+
+    command_line.focus
+    scroll_to_bottom
+    responder = @win.firstResponder
+    # webView:shouldInsertText:replacingDOMRange:givenAction: is not powerful enough for us
+    # to do all our work so we add our keyDown method on the firstResponder (a child of the WebView)
+    class << responder
+      alias :base_key_down :keyDown
+      attr_writer :action_performer
+      def keyDown(e)
+        # if the user presses Return, the entered text is evaluated,
+        # but if also presses Alt, a carriage return is inserted
+        if e.characters == ?\r and (e.modifierFlags & NSAlternateKeyMask == 0)
+          @action_performer.perform_action
+        else
+          base_key_down(e)
+        end
+      end
+    end
+    responder.action_performer = self
+  end
+  
   def perform_action
     @line_num += 1
     command = command_line.innerText.tr(' ', ' ') # replace non breakable spaces by normal spaces
@@ -146,7 +171,6 @@ class Application
       add_div("#{e.class.name}: #{e.message}" + (backtrace.empty? ? '' : "\n#{backtrace.join("\n")}"))
     end
     write_prompt
-    scroll_to_bottom
   end
   
   # file/open

@@ -18,6 +18,10 @@ module HotCocoa
         file.item :new, :key => "n"
         file.item :open, :key => "o"
       end
+      main.submenu :edit do |file|
+        file.item :copy, :key => "c"
+        file.item :paste, :key => "v"
+      end
       main.submenu :window do |win|
         win.item :minimize, :key => "m"
         win.item :zoom
