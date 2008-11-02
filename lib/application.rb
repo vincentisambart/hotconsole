@@ -8,7 +8,21 @@ framework 'webkit'
 # - allows Alt+Return
 class Application
   include HotCocoa
-  
+
+  class Writer
+    def initialize(target)
+      @target = target
+    end
+    def write(str)
+      @target.write_text(str)
+      str.length
+    end
+    def puts(str)
+      write("#{str}\n")
+      nil
+    end
+  end
+    
   def start
     @line_num = 0
     @binding = TOPLEVEL_BINDING
@@ -46,6 +60,7 @@ class Application
   end
   
   def webView view, didFinishLoadForFrame: frame
+    $stdout = Writer.new(self)
     write_prompt
   end
   
@@ -78,9 +93,9 @@ class Application
   end
   
   def write_text(text)
-    div = document.createElement('div')
-    div.innerText = text
-    write_element(div)
+    span = document.createElement('span')
+    span.innerText = text
+    write_element(span)
   end
 
   def write_prompt
@@ -89,7 +104,10 @@ class Application
     prompt = row.insertCell(-1)
     prompt.innerText = '>>'
     typed_text = row.insertCell(-1)
-    command_line.setAttribute('id', value: nil) if command_line
+    if command_line
+      command_line.setAttribute('contentEditable', value: nil)
+      command_line.setAttribute('id', value: nil)
+    end
     typed_text.setAttribute('contentEditable', value: 'true')
     typed_text.setAttribute('id', value: 'command_line')
     typed_text.setAttribute('style', value: 'width: 100%;')
@@ -105,10 +123,7 @@ class Application
 
   def perform_action
     @line_num += 1
-    #nbsp = ' '
-    command = command_line.innerText
-    #the following line does not work due to bugs in MacRuby
-    #command = command.gsub(nbsp, ' ')
+    command = command_line.innerText.tr(' ', ' ') # replace non breakable spaces by normal spaces
     if command.empty?
       write_prompt
       return
