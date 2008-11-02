@@ -75,7 +75,8 @@ class Application
   def command_line
     document.getElementById('command_line')
   end
-  
+
+# We will use certainly use it later so it let it commented out
 #  def webView webView, shouldInsertText: text, replacingDOMRange: range, givenAction: action
 #    if text == ?\n
 #      perform_action
@@ -127,12 +128,15 @@ class Application
 
     command_line.focus
     scroll_to_bottom
-    responder = @win.firstResponder
+
     # webView:shouldInsertText:replacingDOMRange:givenAction: is not powerful enough for us
-    # to do all our work so we add our keyDown method on the firstResponder (a child of the WebView)
+    # to do all our work so we add our keyDown method on the firstResponder (a WebHTMLView, child of the WebView)
+    responder = @win.firstResponder
+    # we must not install our callback more than once
+    return if responder.respond_to?(:base_key_down)
     class << responder
-      alias :base_key_down :keyDown
       attr_writer :action_performer
+      alias :base_key_down :keyDown
       def keyDown(e)
         # if the user presses Return, the entered text is evaluated,
         # but if also presses Alt, a carriage return is inserted
