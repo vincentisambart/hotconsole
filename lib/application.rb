@@ -3,9 +3,9 @@ framework 'webkit'
 
 # TODO:
 # - stdin
-# - wrap too long text
 # - history (up/down or maybe alt+up/alt+down)
 # - copy/paste
+# - do not perform_action if the code is not finished (needs a simple lexer)
 class Application
   include HotCocoa
 
@@ -23,9 +23,17 @@ class Application
       nil
     end
   end
+  
+#  def load_html_generator
+#    Dir.glob(NSBundle.mainBundle.resourcePath.fileSystemRepresentation+"/lib/generator/*.rb").each do |filename|
+#      load filename
+#    end
+#  end
     
   def start
     @line_num = 0
+    @history = [ ]
+    @pos_in_history = 0
     @binding = TOPLEVEL_BINDING
     
     def base_html
@@ -35,8 +43,9 @@ class Application
       <head>
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
         <style type="text/css"><!--
-          * {
+          body, body * {
             font-family: Monaco;
+            white-space: pre-wrap; /* in normal mode, WebKit sometimes adds nbsp when pressing space */
           }
         --></style>
       </head>
@@ -45,6 +54,7 @@ class Application
       HTML
     end
     
+    #load_html_generator # can't use it for the moment because of MacRuby bugs
     application :name => "MacIrb" do |app|
       app.delegate = self
 
@@ -64,6 +74,9 @@ class Application
   def webView view, didFinishLoadForFrame: frame
     writer = Writer.new(self)
     $stdout = writer
+    # we must be sure the body is really empty because of the preservation of white spaces
+    # we can easily have a carriage return left in the HTML
+    document.body.innerHTML = ''
     #$stderr = writer # for debugging it may be better to disable this (and look in Console.app)
     write_prompt
   end
@@ -75,22 +88,48 @@ class Application
   def command_line
     document.getElementById('command_line')
   end
-
-# We will use certainly use it later so it let it commented out
-#  def webView webView, shouldInsertText: text, replacingDOMRange: range, givenAction: action
-#    if text == ?\n
-#      perform_action
-#      false
-#    else
-#      true
-#    end
-#  end
   
+  def command_line_carret_to_beginning
+    # move the carret of the command line to it first character
+    cl = command_line
+    range = document.createRange
+    range.setStart cl, offset: 0
+    range.setEnd cl, offset: 0
+    @web_view.setSelectedDOMRange range, affinity: NSSelectionAffinityUpstream
+  end
+  
+  def display_history
+    command_line.innerText = @history[@pos_in_history] || ''
+    # if we do not move the caret to the beginning,
+    # we lose the focus if the command line is emptied
+    command_line_carret_to_beginning
+  end
+  
+  def webView webView, doCommandBySelector: command
+    if command == 'insertNewline:' # Return
+      perform_action
+    elsif command == 'moveBackward:' # Alt+Up Arrow
+      if @pos_in_history > 0
+        @pos_in_history -= 1
+        display_history
+      end
+    elsif command == 'moveForward:' # Alt+Down Arrow
+      if @pos_in_history < @history.length
+        @pos_in_history += 1
+        display_history
+      end
+    # moveToBeginningOfParagraph and moveToEndOfParagraph are also sent by Alt+Up/Down
+    # but we must ignore them because they move the cursor
+    elsif command != 'moveToBeginningOfParagraph:' and command != 'moveToEndOfParagraph:'
+      return false
+    end
+    true
+  end
+
   def add_div(text)
-    doc = document
-    div = doc.createElement('div')
+    div = document.createElement('div')
     div.innerText = text
-    doc.body.appendChild(div)
+    write_element(div)
   end
   
   def write_element(element)
@@ -128,40 +167,23 @@ class Application
 
     command_line.focus
     scroll_to_bottom
-
-    # webView:shouldInsertText:replacingDOMRange:givenAction: is not powerful enough for us
-    # to do all our work so we add our keyDown method on the firstResponder (a WebHTMLView, child of the WebView)
-    responder = @win.firstResponder
-    # we must not install our callback more than once
-    return if responder.respond_to?(:base_key_down)
-    class << responder
-      attr_writer :action_performer
-      alias :base_key_down :keyDown
-      def keyDown(e)
-        # if the user presses Return, the entered text is evaluated,
-        # but if also presses Alt, a carriage return is inserted
-        if e.characters == ?\r and (e.modifierFlags & NSAlternateKeyMask == 0)
-          @action_performer.perform_action
-        else
-          base_key_down(e)
-        end
-      end
-    end
-    responder.action_performer = self
   end
   
   def perform_action
     @line_num += 1
-    command = command_line.innerText.tr(' ', ' ') # replace non breakable spaces by normal spaces
+    command = command_line.innerText
     if command.empty?
       write_prompt
       return
     end
+    
+    @history.push(command)
+    @pos_in_history = @history.length
 
     eval_file = __FILE__
     eval_line = -1
     begin
-      # eval_line must be exactly the line where the eval call occurs
+      # eval_line must have exactly the line number where the eval call occurs
       eval_line = __LINE__; value = eval(command, @binding, 'macirb', @line_num)
       add_div(value.inspect)
     rescue Exception => e
