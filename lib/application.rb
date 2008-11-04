@@ -3,8 +3,8 @@ framework 'webkit'
 
 # TODO:
 # - stdin
-# - history (up/down or maybe alt+up/alt+down)
-# - copy/paste
+# - copy/paste (with the app menu)
+# - html display
 # - do not perform_action if the code is not finished (needs a simple lexer)
 class Application
   include HotCocoa
@@ -24,11 +24,11 @@ class Application
     end
   end
   
-#  def load_html_generator
-#    Dir.glob(NSBundle.mainBundle.resourcePath.fileSystemRepresentation+"/lib/generator/*.rb").each do |filename|
-#      load filename
-#    end
-#  end
+  def load_html_generator
+    Dir.glob(NSBundle.mainBundle.resourcePath.fileSystemRepresentation+"/lib/generator/*.rb").each do |filename|
+      load filename
+    end
+  end
     
   def start
     @line_num = 0
@@ -126,9 +126,13 @@ class Application
     true
   end
 
-  def add_div(text)
+  def add_div(text, is_html=false)
     div = document.createElement('div')
-    div.innerText = text
+    if is_html
+      div.innerHTML = text
+    else
+      div.innerText = text
+    end
     write_element(div)
   end
   
@@ -185,6 +189,7 @@ class Application
     begin
       # eval_line must have exactly the line number where the eval call occurs
       eval_line = __LINE__; value = eval(command, @binding, 'macirb', @line_num)
+      #add_div(value.html_representation, true) # can't use it for the moment because of MacRuby bugs
       add_div(value.inspect)
     rescue Exception => e
       backtrace = e.backtrace
