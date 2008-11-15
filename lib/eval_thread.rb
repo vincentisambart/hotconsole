@@ -1,35 +1,35 @@
 require 'thread' # for Queue
-require 'lib/helpers' # for send_on_main_thread
+require 'lib/helpers' # for Object#send_on_main_thread
 
 # EvalThread is the class that does all the code evaluation.
 # The code is evaluated in a new thread mainly for 2 reasons:
 # - so the application is not frozen if a commands takes too much time
 # - to be able to find where to write the text for the standard output (using thread variables)
 class EvalThread
-  # Writer is the class to manage the standard output
+  # Writer is the class to manage the standard output.
   # The difficult part is to find the good target to print to,
   # especially if the user starts new threads
-  # Warning: It won't work if the current thread is a NSThread or pure C thread,
-  #          but anyway NSThreads do no seem to work for the moment in MacRuby
+  # warning: It won't work if the current thread is a NSThread or pure C thread,
+  #          but anyway for the moment NSThreads do no seem to work well in MacRuby
   class Writer
     # sets the target where to write when something is written on the standard output
     def self.set_stdout_target_for_thread(target)
       Thread.current[:_irb_stdout_target] = target
     end
     
-    # a standard output object has only one mandatory method: write
+    # a standard output object has only one mandatory method: write.
     # it generally returns the number of characters written
     def write(str)
       find_target_and_call :write, str
     end
     
-    # If puts is not there, Ruby will automaticall use the write method when using Kernel#puts,
-    # but defining it has 2 advantages:
-    # - if it is not defined, you cannot of course use $stdout.puts directly
+    # if puts is not there, Ruby will automatically use the write
+    # method when calling Kernel#puts, but defining it has 2 advantages:
+    # - if puts is not defined, you cannot of course use $stdout.puts directly
     # - when Ruby emulates puts, it calls write twice
     #   (once for the string and once for the carriage return)
-    #   but here we send the calls to another thread so being able
-    #   to save up one (slow) interthread call is nice
+    #   but here we send the calls to another thread so it's nice
+    #   to be able to save up one (slow) interthread call
     def puts(str)
       find_target_and_call :puts, str
       nil
@@ -37,9 +37,9 @@ class EvalThread
     
     private
     
-    # The core of write/puts: tries to find the target where to
-    # write the text and calls the indicated function on it
-    # It returns the number of characters in the given string
+    # the core of write/puts: tries to find the target where to
+    # write the text and calls the indicated function on it.
+    # it returns the number of characters in the given string
     def find_target_and_call(function_name, str)
       current_thread = Thread.current
       target = current_thread[:_irb_stdout_target]
@@ -67,23 +67,24 @@ class EvalThread
   # replace Ruby's standard output
   $stdout = Writer.new
   
-  # Starts a new EvalThread in a separate thread and returns it
-  # The target is the terminal where the standard output and prompt are written
+  # starts a new EvalThread in a separate thread and returns it.
+  # the target is the terminal where the standard output and prompt are written.
+  # target must have 3 methods: write, puts and back_from_eval, all taking a string argument
   def self.start(target)
     instance = EvalThread.new(target)
     Thread.new { instance.run }
     instance
   end
 
-  # Sends a command to evaluate
-  # The line_number is not computed internally because the empty lines
+  # sends a command to evaluate.
+  # the line_number is not computed internally because the empty lines
   # are not sent to the eval thread but still increase the line number
   def send_command(line_number, command)
     @queue_for_commands.push([line_number, command])
   end
   
-  # Asks the thread to end
-  # This operation is not immediate because if an operation is
+  # asks the thread to end.
+  # this operation is not immediate because if an operation is
   # still working in the thread, we want it to finish
   def end_thread
     @queue_for_commands.push([nil, :END])
@@ -96,10 +97,10 @@ class EvalThread
   end
     
   def run
-    # create a new ThreadGroup and sets it as the group for the current thread
+    # create a new ThreadGroup and sets it as the group for the current thread.
     # the ThreadGroup allows us to find the parent thread when the standard output is used
-    # from a thread created by the user
-    # (as new threads are automatically added to the ThreadGroup of the parent thread)
+    # from a thread created by the user and not by us as new threads are automatically added
+    # to the ThreadGroup of their parent thread
     ThreadGroup.new.add(Thread.current)
     
     # when some code in the thread uses the standard output, we want the text
