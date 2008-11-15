@@ -16,11 +16,17 @@ module HotCocoa
       end
       main.submenu :file do |file|
         file.item :new, :key => "n"
-        file.item :open, :key => "o"
+        file.item :close, :key => "w", :modifiers => [:command]
       end
-      main.submenu :edit do |file|
-        file.item :copy, :key => "c"
-        file.item :paste, :key => "v"
+      main.submenu :edit do |edit|
+        edit.item :undo, :key => "z", :modifiers => [:command]
+        edit.item :redo, :key => "z", :modifiers => [:command, :shift]
+        edit.separator
+        edit.item :copy, :key => "c"
+        edit.item :paste, :key => "v"
+      end
+      main.submenu :view do |view|
+        view.item :clear, :key => "k", :modifiers => [:command]
       end
       main.submenu :window do |win|
         win.item :minimize, :key => "m"
