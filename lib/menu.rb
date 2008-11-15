@@ -22,6 +22,7 @@ module HotCocoa
         edit.item :undo, :key => "z", :modifiers => [:command]
         edit.item :redo, :key => "z", :modifiers => [:command, :shift]
         edit.separator
+        edit.item :cut, :key => "x"
         edit.item :copy, :key => "c"
         edit.item :paste, :key => "v"
       end

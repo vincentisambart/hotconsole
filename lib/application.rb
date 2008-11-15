@@ -151,6 +151,18 @@ class Terminal
     @web_view.paste(sender)
   end
 
+  def on_cut(sender)
+    @web_view.cut(sender)
+  end
+
+  def on_undo(sender)
+    @web_view.undoManager.undo
+  end
+
+  def on_redo(sender)
+    @web_view.undoManager.redo
+  end
+
   def base_html
     return <<-HTML
     <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
@@ -336,7 +348,6 @@ class Terminal
 end
 
 class Application
-
   def start
     application :name => "MacIrb" do |app|
       app.delegate = self
