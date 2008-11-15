@@ -6,6 +6,7 @@ framework 'webkit'
 # TODO:
 # - stdin
 # - do not perform_action if the code is not finished (needs a simple lexer)
+# - split in multiple files
 
 class Object
   # calls a method on the object on the main thread
@@ -52,6 +53,9 @@ class EvalThread
     
     private
     
+    # The core of write/puts: tries to find the target where to
+    # write the text and calls the indicated function on it
+    # It returns the number of characters in the given string
     def find_target_and_call(function_name, str)
       current_thread = Thread.current
       target = current_thread[:_irb_stdout_target]
@@ -170,9 +174,7 @@ class Terminal
     @history = [ ]
     @pos_in_history = 0
     
-    terminal = self
-
-    @eval_thread = EvalThread.start(terminal)
+    @eval_thread = EvalThread.start(self)
     
     frame = [300, 300, 600, 400]
     w = NSApp.mainWindow
@@ -183,7 +185,6 @@ class Terminal
     HotCocoa.window :frame => frame, :title => "MacIrb" do |win|
       @win = win
       win.will_close { @eval_thread.end_thread }
-      win.delegate = self
       win.contentView.margin = 0
       @web_view = web_view(:layout => {:expand => [:width, :height]})
       clear
