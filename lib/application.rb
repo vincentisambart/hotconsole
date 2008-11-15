@@ -3,143 +3,13 @@ require 'hotcocoa'
 include HotCocoa
 framework 'webkit'
 
+require 'lib/eval_thread'
+
 # TODO:
 # - stdin
 # - do not perform_action if the code is not finished (needs a simple lexer)
-# - split in multiple files
-
-class Object
-  # calls a method on the object on the main thread
-  def send_on_main_thread(function_name, parameter = nil, asynchronous = true)
-    function_name = function_name.to_s
-    # if the target method has a parameter, we have to be sure the method name ends with a ':'
-    function_name << ':' if parameter and not /:$/.match(function_name)
-    performSelectorOnMainThread function_name, withObject: parameter, waitUntilDone: (not asynchronous)
-  end
-end
-
-# EvalThread is the class that does all the code evaluation.
-# The code is evaluated in a new thread mainly for 2 reasons:
-# - so the application is not frozen if a commands takes too much time
-# - to be able to find where to write the text for the standard output (using thread variables)
-class EvalThread
-  # Writer is the class to manage the standard output
-  # The difficult part is to find the good target to print to,
-  # especially if the user starts new threads
-  # Warning: It won't work if the current thread is a NSThread or pure C thread
-  #          but anyway NSThreads do no seem to work for the moment in MacRuby
-  class Writer
-    def self.set_stdout_target_for_thread(target)
-      Thread.current[:_irb_stdout_target] = target
-    end
-    
-    # a standard output object has only one mandatory method: write
-    # it generally returns the number of characters written
-    def write(str)
-      find_target_and_call :write, str
-    end
-    
-    # If puts is not there, Ruby will automaticall use the write method when using Kernel#puts,
-    # but defining it has 2 advantages:
-    # - if it is not defined, you cannot of course use $stdout.puts directly
-    # - when Ruby emulates puts, it calls write twice
-    #   (once for the string and once for the carriage return)
-    #   but here we send the calls to another thread so being able
-    #   to save up one (slow) interthread call is nice
-    def puts(str)
-      find_target_and_call :puts, str
-      nil
-    end
-    
-    private
-    
-    # The core of write/puts: tries to find the target where to
-    # write the text and calls the indicated function on it
-    # It returns the number of characters in the given string
-    def find_target_and_call(function_name, str)
-      current_thread = Thread.current
-      target = current_thread[:_irb_stdout_target]
-      
-      # sends str to the target identified by the target local variable
-      send_text = lambda do
-        target.send_on_main_thread function_name, str
-        str.length
-      end
-      
-      # first, if we have a target in the thread, use it
-      return send_text.call if target
-      
-      # if we do not have any target, search for a target in every thread in the ThreadGroup
-      if group = current_thread.group
-        group.list.each do |thread|
-          return send_text.call if target = thread[:_irb_stdout_target]
-        end
-      end
-      
-      # if we do not find any target, just write it on STDERR
-      STDERR.send(function_name, str)
-    end
-  end
-  # replace Ruby's standard output
-  $stdout = Writer.new
-  
-  def self.start(target)
-    instance = EvalThread.new(target)
-    Thread.new { instance.run }
-    instance
-  end
-
-  def send_command(line_number, command)
-    @queue_for_commands.push([line_number, command])
-  end
-  
-  def end_thread
-    @queue_for_commands.push([nil, :END])
-  end
-
-  def initialize(target)
-    @target = target
-    @queue_for_commands = Queue.new
-    @binding = TOPLEVEL_BINDING.dup
-  end
-    
-  def run
-    # Create a new ThreadGroup and sets it as the group for the current thread
-    # The ThreadGroup allows us to find the parent thread when the standard output is used
-    # from a thread created by the user
-    # (as new threads are automatically added to the ThreadGroup of the parent thread)
-    ThreadGroup.new.add(Thread.current)
-    
-    Writer.set_stdout_target_for_thread(@target)
-    loop do
-      line_num, command = @queue_for_commands.pop
-      break if command == :END
-
-      eval_file = __FILE__
-      eval_line = -1
-      begin
-        # eval_line must have exactly the line number where the eval call occurs
-        eval_line = __LINE__; value = eval(command, @binding, 'macirb', line_num)
-        back_from_eval "=> #{value.inspect}\n"
-      rescue Exception => e
-        backtrace = e.backtrace
-        i = backtrace.index { |l| l.index("#{eval_file}:#{eval_line}") }
-        if i == 0
-          backtrace = []
-        elsif i
-          backtrace = backtrace[0..i-1]
-        end
-        back_from_eval "#{e.class.name}: #{e.message}\n" + (backtrace.empty? ? '' : "#{backtrace.join("\n")}\n")
-      end
-    end
-  end
-  
-  private
-  
-  def back_from_eval(text)
-    @target.send_on_main_thread :back_from_eval, text
-  end
-end
+# - correct the line numbers: when code is written on multiple lines on the prompt,
+#   the line number should increase not by one but by the number of lines evaluated
 
 class Terminal
   # TODO this should not be needed in theory, since the window should forward the action to its subview  
@@ -181,6 +51,8 @@ class Terminal
     HTML
   end
   
+  # when the window is closes, we want the evaluating thread to die
+  # (after ending its current evaluation if is still evaluating code)
   def windowWillClose notification
     @window_closed = true
     @eval_thread.end_thread
@@ -202,17 +74,22 @@ class Terminal
     HotCocoa.window :frame => frame, :title => "MacIrb" do |win|
       @win = win
       @window_closed = false
-      win.delegate = self
-      win.contentView.margin = 0
+      @win.delegate = self
+      @win.contentView.margin = 0
       @web_view = web_view(:layout => {:expand => [:width, :height]})
       clear
       @web_view.editingDelegate = self
       @web_view.frameLoadDelegate = self
-      win << @web_view
+      @win << @web_view
     end
   end
   
   def clear
+    if command_line
+      @next_prompt_command = command_line.innerText
+    else
+      @next_prompt_command = nil
+    end
     @web_view.mainFrame.loadHTMLString base_html, baseURL:nil
   end
 
@@ -223,16 +100,19 @@ class Terminal
     write_prompt
   end
   
+  # return the HTML document of the main frame
   def document
     @web_view.mainFrame.DOMDocument
   end
   
+  # returns the DOM node for the command line
+  # (or nil if there is no command line currently)
   def command_line
     document.getElementById('command_line')
   end
   
+  # move the carret of the command line to its first character
   def command_line_carret_to_beginning
-    # move the carret of the command line to it first character
     cl = command_line
     range = document.createRange
     range.setStart cl, offset: 0
@@ -247,6 +127,7 @@ class Terminal
     command_line_carret_to_beginning
   end
   
+  # callback called when a command by selector is run on the WebView
   def webView webView, doCommandBySelector: command
     if command == 'insertNewline:' # Return
       perform_action
@@ -268,28 +149,30 @@ class Terminal
     true
   end
 
-  def add_div(text)
-    div = document.createElement('div')
-    div.innerText = text
-    write_element(div)
-  end
-  
+  # simply writes (appends) a DOM element to the WebView
   def write_element(element)
     document.body.appendChild(element)
   end
   
   def write(text)
     if @window_closed
+      # if the window was closed while code that printed text was still running,
+      # the text is displayed on the standard error output
       STDERR.write(text)
     else
+      # if the window is still opened, just put the text
+      # in a DOM span element and writes it on the WebView
       span = document.createElement('span')
       span.innerText = text
       write_element(span)
     end
   end
   
+  # puts is just a write of the text followed by a carriage return and that returns nil
   def puts(text)
-    # puts is just a write with a carriage return that returns nil
+    # we do not call just write("#{text}\n") because of encoding problems
+    # and bugs in string concatenation
+    # note also that Ruby itself also does it in two calls to write
     write text
     write "\n"
   end
@@ -319,16 +202,21 @@ class Terminal
     typed_text.setAttribute('contentEditable', value: 'true')
     typed_text.setAttribute('id', value: 'command_line')
     typed_text.setAttribute('style', value: 'width: 100%;')
+    if @next_prompt_command
+      typed_text.innerText = @next_prompt_command
+      @next_prompt_command = nil
+    end
     write_element(table)
 
     command_line.focus
     scroll_to_bottom
   end
   
+  # executes the code written on the prompt when the user validates it with return
   def perform_action
     @line_num += 1
     command = command_line.innerText
-    if command.empty?
+    if command.strip.empty?
       write_prompt
       return
     end
@@ -336,11 +224,19 @@ class Terminal
     @history.push(command)
     @pos_in_history = @history.length
 
+    # the code is sent to an other thread that will do the evaluation
     @eval_thread.send_command(@line_num, command)
+    # the user must not be able to modify the prompt until the command ends
+    # (when back_from_eval is called)
     end_edition
   end
 
+  # back_from_eval is called when the evaluation thread has finished its evaluation of the given code
+  # text is either the representation of the value returned by the code executed, or the backtrace of an exception
   def back_from_eval(text)
+    # if the window was closed while code was still executing,
+    # we can just ignore the call because there is no need
+    # to print the result and a new prompt
     return if @window_closed
     write text
     write_prompt
@@ -369,7 +265,19 @@ class Application
   end
   
   def on_clear(sender)
-    NSApp.mainWindow.delegate.clear
+    w = NSApp.mainWindow
+    if w
+      terminal = w.delegate
+      # the user can't clear the window
+      # if some code is still executing
+      if terminal.command_line
+        terminal.clear
+      else
+        NSBeep()
+      end
+    else
+      NSBeep()
+    end
   end
 
   private
