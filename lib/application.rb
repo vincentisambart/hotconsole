@@ -1,9 +1,8 @@
-require 'thread'
+require 'lib/eval_thread' # for EvalThread and standard output redirection
+
 require 'hotcocoa'
 include HotCocoa
 framework 'webkit'
-
-require 'lib/eval_thread'
 
 # TODO:
 # - stdin
@@ -52,7 +51,7 @@ class Terminal
   end
   
   # when the window is closes, we want the evaluating thread to die
-  # (after ending its current evaluation if is still evaluating code)
+  # (after ending its current evaluation if it is still evaluating code)
   def windowWillClose notification
     @window_closed = true
     @eval_thread.end_thread
@@ -74,12 +73,12 @@ class Terminal
     HotCocoa.window :frame => frame, :title => "MacIrb" do |win|
       @win = win
       @window_closed = false
-      @win.delegate = self
+      @win.delegate = self # for the diverse on_XXXX and windowWillClose
       @win.contentView.margin = 0
       @web_view = web_view(:layout => {:expand => [:width, :height]})
       clear
-      @web_view.editingDelegate = self
-      @web_view.frameLoadDelegate = self
+      @web_view.editingDelegate = self # for webView:doCommandBySelector:
+      @web_view.frameLoadDelegate = self # for webView:didFinishLoadForFrame:
       @win << @web_view
     end
   end

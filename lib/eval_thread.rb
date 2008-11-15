@@ -1,4 +1,5 @@
-require 'lib/helpers'
+require 'thread' # for Queue
+require 'lib/helpers' # for send_on_main_thread
 
 # EvalThread is the class that does all the code evaluation.
 # The code is evaluated in a new thread mainly for 2 reasons:
