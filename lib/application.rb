@@ -169,6 +169,11 @@ class Terminal
     HTML
   end
   
+  def windowWillClose notification
+    @window_closed = true
+    @eval_thread.end_thread
+  end
+  
   def start
     @line_num = 0
     @history = [ ]
@@ -185,10 +190,7 @@ class Terminal
     HotCocoa.window :frame => frame, :title => "MacIrb" do |win|
       @win = win
       @window_closed = false
-      win.will_close do
-        @window_closed = true
-        @eval_thread.end_thread
-      end
+      win.delegate = self
       win.contentView.margin = 0
       @web_view = web_view(:layout => {:expand => [:width, :height]})
       clear
