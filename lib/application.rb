@@ -184,7 +184,11 @@ class Terminal
     end
     HotCocoa.window :frame => frame, :title => "MacIrb" do |win|
       @win = win
-      win.will_close { @eval_thread.end_thread }
+      @window_closed = false
+      win.will_close do
+        @window_closed = true
+        @eval_thread.end_thread
+      end
       win.contentView.margin = 0
       @web_view = web_view(:layout => {:expand => [:width, :height]})
       clear
@@ -261,9 +265,13 @@ class Terminal
   end
   
   def write(text)
-    span = document.createElement('span')
-    span.innerText = text
-    write_element(span)
+    if @window_closed
+      STDERR.write(text)
+    else
+      span = document.createElement('span')
+      span.innerText = text
+      write_element(span)
+    end
   end
   
   def puts(text)
@@ -319,6 +327,7 @@ class Terminal
   end
 
   def back_from_eval(text)
+    return if @window_closed
     write text
     write_prompt
   end
