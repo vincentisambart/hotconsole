@@ -7,8 +7,6 @@ framework 'webkit'
 # TODO:
 # - stdin
 # - do not perform_action if the code is not finished (needs a simple lexer)
-# - correct the line numbers: when code is written on multiple lines on the prompt,
-#   the line number should increase not by one but by the number of lines evaluated
 
 class Terminal
   # TODO this should not be needed in theory, since the window should forward the action to its subview  
@@ -58,7 +56,7 @@ class Terminal
   end
   
   def start
-    @line_num = 0
+    @line_num = 1
     @history = [ ]
     @pos_in_history = 0
     
@@ -213,8 +211,9 @@ class Terminal
   
   # executes the code written on the prompt when the user validates it with return
   def perform_action
-    @line_num += 1
+    current_line_number = @line_num
     command = command_line.innerText
+    @line_num += command.count("\n")+1
     if command.strip.empty?
       write_prompt
       return
@@ -224,7 +223,7 @@ class Terminal
     @pos_in_history = @history.length
 
     # the code is sent to an other thread that will do the evaluation
-    @eval_thread.send_command(@line_num, command)
+    @eval_thread.send_command(current_line_number, command)
     # the user must not be able to modify the prompt until the command ends
     # (when back_from_eval is called)
     end_edition
