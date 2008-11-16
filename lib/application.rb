@@ -9,27 +9,6 @@ framework 'webkit'
 # - do not perform_action if the code is not finished (needs a simple lexer)
 
 class Terminal
-  # TODO this should not be needed in theory, since the window should forward the action to its subview  
-  def on_copy(sender)
-    @web_view.copy(sender)
-  end
-  
-  def on_paste(sender)
-    @web_view.paste(sender)
-  end
-
-  def on_cut(sender)
-    @web_view.cut(sender)
-  end
-
-  def on_undo(sender)
-    @web_view.undoManager.undo
-  end
-
-  def on_redo(sender)
-    @web_view.undoManager.redo
-  end
-
   def base_html
     return <<-HTML
     <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">

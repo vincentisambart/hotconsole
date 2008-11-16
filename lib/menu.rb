@@ -19,12 +19,12 @@ module HotCocoa
         file.item :close, :key => "w", :modifiers => [:command]
       end
       main.submenu :edit do |edit|
-        edit.item :undo, :key => "z", :modifiers => [:command]
-        edit.item :redo, :key => "z", :modifiers => [:command, :shift]
+        edit.item :undo, :key => "z", :modifiers => [:command], :action => "undo:"
+        edit.item :redo, :key => "z", :modifiers => [:command, :shift], :action => "redo:"
         edit.separator
-        edit.item :cut, :key => "x"
-        edit.item :copy, :key => "c"
-        edit.item :paste, :key => "v"
+        edit.item :cut, :key => "x", :action => "cut:"
+        edit.item :copy, :key => "c", :action => "copy:"
+        edit.item :paste, :key => "v", :action => "paste:"
       end
       main.submenu :view do |view|
         view.item :clear, :key => "k", :modifiers => [:command]
