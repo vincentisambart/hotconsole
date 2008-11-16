@@ -8,6 +8,7 @@ include HotCocoa
 # - stdin
 # - do not perform_action if the code typed is not finished (needs a simple lexer)
 # - when closing the application, if code is running, ask for what to do (cancel, kill and close all)
+# - add an help message in the windows when they are opened
 
 class Terminal
   def base_html
