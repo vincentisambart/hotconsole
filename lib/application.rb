@@ -1,12 +1,13 @@
 require 'lib/eval_thread' # for EvalThread and standard output redirection
 
 require 'hotcocoa'
-include HotCocoa
 framework 'webkit'
+include HotCocoa
 
 # TODO:
 # - stdin
-# - do not perform_action if the code is not finished (needs a simple lexer)
+# - do not perform_action if the code typed is not finished (needs a simple lexer)
+# - when closing the application, if code is running, ask for what to do (cancel, kill and close all)
 
 class Terminal
   def base_html
@@ -27,11 +28,29 @@ class Terminal
     HTML
   end
   
-  # when the window is closes, we want the evaluating thread to die
-  # (after ending its current evaluation if it is still evaluating code)
-  def windowWillClose notification
-    @window_closed = true
+  def alertDidEnd alert, returnCode: return_code, contextInfo: context_info
+    return if return_code == NSAlertSecondButtonReturn # do nothing if the use presses cancel
+    
+    # in all cases, first ask the thread to end nicely if possible
     @eval_thread.end_thread
+    
+    @window.close
+    @window_closed = true
+    
+    @eval_thread.kill_running_threads if return_code == NSAlertFirstButtonReturn # kill the running code if asked
+  end
+  method_signature "alertDidEnd:returnCode:contextInfo:", "v@:@i^v" # MacRuby needs it not to crash
+  
+  def windowShouldClose win
+    return true if command_line and not @eval_thread.children_threads_running?
+    alert = NSAlert.alloc.init
+    alert.messageText = "Some code is still running in this console.\nDo you really want to close it?"
+    alert.alertStyle = NSCriticalAlertStyle
+    alert.addButtonWithTitle("Close and kill")
+    alert.addButtonWithTitle("Cancel")
+    alert.addButtonWithTitle("Close and let run")
+    alert.beginSheetModalForWindow @window, modalDelegate: self, didEndSelector: "alertDidEnd:returnCode:contextInfo:", contextInfo: nil
+    false
   end
   
   def start
@@ -39,7 +58,7 @@ class Terminal
     @history = [ ]
     @pos_in_history = 0
     
-    @eval_thread = EvalThread.start(self)
+    @eval_thread = EvalThread.new(self)
     
     frame = [300, 300, 600, 400]
     w = NSApp.mainWindow
@@ -47,16 +66,16 @@ class Terminal
       frame[0] = w.frame.origin.x + 20
       frame[1] = w.frame.origin.y - 20
     end
-    HotCocoa.window :frame => frame, :title => "MacIrb" do |win|
-      @win = win
+    window :frame => frame, :title => "MacIrb" do |win|
+      @window = win
       @window_closed = false
-      @win.delegate = self # for the diverse on_XXXX and windowWillClose
-      @win.contentView.margin = 0
+      @window.delegate = self # for windowShouldClose
+      @window.contentView.margin = 0
       @web_view = web_view(:layout => {:expand => [:width, :height]})
       clear
       @web_view.editingDelegate = self # for webView:doCommandBySelector:
       @web_view.frameLoadDelegate = self # for webView:didFinishLoadForFrame:
-      @win << @web_view
+      @window << @web_view
     end
   end
   
@@ -235,7 +254,7 @@ class Application
   def on_close(sender)
     w = NSApp.mainWindow
     if w
-      w.close
+      w.performClose self
     else
       NSBeep()
     end

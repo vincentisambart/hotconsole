@@ -67,15 +67,6 @@ class EvalThread
   # replace Ruby's standard output
   $stdout = Writer.new
   
-  # starts a new EvalThread in a separate thread and returns it.
-  # the target is the terminal where the standard output and prompt are written.
-  # target must have 3 methods: write, puts and back_from_eval, all taking a string argument
-  def self.start(target)
-    instance = EvalThread.new(target)
-    Thread.new { instance.run }
-    instance
-  end
-
   # sends a command to evaluate.
   # the line_number is not computed internally because the empty lines
   # are not sent to the eval thread but still increase the line number
@@ -85,23 +76,51 @@ class EvalThread
   
   # asks the thread to end.
   # this operation is not immediate because if an operation is
-  # still working in the thread, we want it to finish
+  # still working in the thread, we want to let it finish
   def end_thread
     @queue_for_commands.push([nil, :END])
   end
-
+  
+  # kill the evaluation thread and its children
+  def kill_running_threads
+    @thread_group.list.each do |thread|
+      thread.kill if thread != @thread
+    end
+    @thread.kill if @thread.alive? # kill the main thread last
+  end
+  
+  def children_threads_running?
+    if @thread.alive?
+      @thread_group.list.count > 1
+    else
+      @thread_group.list.count > 0
+    end
+  end
+  
+  # starts a new EvalThread in a separate thread
+  # the target is the terminal where the standard output and prompt are written.
+  # target must have 3 methods: write, puts and back_from_eval, all taking a string argument
   def initialize(target)
     @target = target
     @queue_for_commands = Queue.new
     @binding = TOPLEVEL_BINDING.dup
+    @thread = Thread.new { run }
   end
-    
+
+  private
+  
+  # tells the target eval has finished and it can show a new prompt
+  def back_from_eval(text)
+    @target.send_on_main_thread :back_from_eval, text
+  end
+
   def run
     # create a new ThreadGroup and sets it as the group for the current thread.
     # the ThreadGroup allows us to find the parent thread when the standard output is used
     # from a thread created by the user and not by us as new threads are automatically added
     # to the ThreadGroup of their parent thread
-    ThreadGroup.new.add(Thread.current)
+    @thread_group = ThreadGroup.new
+    @thread_group.add(Thread.current)
     
     # when some code in the thread uses the standard output, we want the text
     # to be printed to the current target (the current terminal)
@@ -133,12 +152,5 @@ class EvalThread
         back_from_eval "#{e.class.name}: #{e.message}\n" + (backtrace.empty? ? '' : "#{backtrace.join("\n")}\n")
       end
     end
-  end
-  
-  private
-  
-  # tells the target eval has finished and it can show a new prompt
-  def back_from_eval(text)
-    @target.send_on_main_thread :back_from_eval, text
   end
 end
