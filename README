@@ -1,5 +1,5 @@
-MacIrb is an graphical IRB-like tool
-(but note that it does not use the IRB code at all).
+HotConsole is an graphical IRB-like console written using HotCocoa.
+It does not use the IRB code at all
 Its advantages compared to the command line macirb:
 - you can easily enter non-ASCII characters
 - multiple windows, with code running in multiple threads
@@ -10,7 +10,7 @@ A few shortcuts:
 
 It requires the last MacRuby trunk.
 
-MacIrb is under the MIT licence:
+HotConsole is under the MIT licence:
 
 Copyright (c) 2008 Vincent Isambart
 

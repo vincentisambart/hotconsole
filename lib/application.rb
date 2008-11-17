@@ -67,7 +67,7 @@ class Terminal
       frame[0] = w.frame.origin.x + 20
       frame[1] = w.frame.origin.y - 20
     end
-    window :frame => frame, :title => "MacIrb" do |win|
+    window :frame => frame, :title => "HotConsole" do |win|
       @window = win
       @window_closed = false
       @window.delegate = self # for windowShouldClose
@@ -242,7 +242,7 @@ end
 
 class Application
   def start
-    application :name => "MacIrb" do |app|
+    application :name => "HotConsole" do |app|
       app.delegate = self
       start_terminal
     end

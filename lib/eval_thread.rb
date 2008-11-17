@@ -137,7 +137,7 @@ class EvalThread
       eval_line = -1
       begin
         # eval_line must have exactly the line number where the eval call occurs
-        eval_line = __LINE__; value = eval(command, @binding, 'macirb', line_num)
+        eval_line = __LINE__; value = eval(command, @binding, 'hotconsole', line_num)
         back_from_eval "=> #{value.inspect}\n"
       rescue Exception => e
         backtrace = e.backtrace
