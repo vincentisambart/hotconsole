@@ -43,6 +43,7 @@ class EvalThread
     def find_target_and_call(function_name, str)
       current_thread = Thread.current
       target = current_thread[:_irb_stdout_target]
+      str = str.to_s unless str.respond_to?(:to_str) # we want to be sure to have a string object
       
       # sends str to the target identified by the target local variable
       send_text = lambda do
