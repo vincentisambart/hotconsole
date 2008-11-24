@@ -9,6 +9,7 @@ include HotCocoa
 # - do not perform_action if the code typed is not finished (needs a simple lexer)
 # - when closing the application, if code is running, ask for what to do (cancel, kill and close all)
 # - add an help message in the windows when they are opened
+# - puts [1, 2] or puts 1, 2 and print [1, 2] do not work like in normal Ruby (but write is OK)
 
 class Terminal
   def base_html
@@ -40,7 +41,6 @@ class Terminal
     
     @eval_thread.kill_running_threads if return_code == NSAlertFirstButtonReturn # kill the running code if asked
   end
-  method_signature "alertDidEnd:returnCode:contextInfo:", "v@:@i^v" # MacRuby needs it not to crash
   
   def windowShouldClose win
     return true if command_line and not @eval_thread.children_threads_running?
