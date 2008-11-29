@@ -19,8 +19,14 @@ class EvalThread
     
     # a standard output object has only one mandatory method: write.
     # it generally returns the number of characters written
-    def write(str)
+    def write(obj)
+      if obj.respond_to?(:str)
+        str = obj
+      else
+        str = obj.to_s
+      end
       find_target_and_call :write, str
+      str.length
     end
     
     # if puts is not there, Ruby will automatically use the write
@@ -30,8 +36,8 @@ class EvalThread
     #   (once for the string and once for the carriage return)
     #   but here we send the calls to another thread so it's nice
     #   to be able to save up one (slow) interthread call
-    def puts(str)
-      find_target_and_call :puts, str
+    def puts(*args)
+      find_target_and_call :puts, args
       nil
     end
     
@@ -40,33 +46,26 @@ class EvalThread
     # the core of write/puts: tries to find the target where to
     # write the text and calls the indicated function on it.
     # it returns the number of characters in the given string
-    def find_target_and_call(function_name, str)
+    def find_target_and_call(function_name, obj)
       current_thread = Thread.current
       target = current_thread[:_irb_stdout_target]
-      str = str.to_s unless str.respond_to?(:to_str) # we want to be sure to have a string object
-      
-      # sends str to the target identified by the target local variable
-      send_text = lambda do
-        target.send_on_main_thread function_name, str
-        str.length
-      end
       
       # first, if we have a target in the thread, use it
-      return send_text.call if target
+      return target.send_on_main_thread(function_name, obj) if target
       
       # if we do not have any target, search for a target in every thread in the ThreadGroup
       if group = current_thread.group
         group.list.each do |thread|
-          return send_text.call if target = thread[:_irb_stdout_target]
+          return target.send_on_main_thread(function_name, obj) if target = thread[:_irb_stdout_target]
         end
       end
       
       # if we still do not have any target, try to get the most recently used and opened terminal
       target = $terminals.last
-      return send_text.call if target
+      return target.send_on_main_thread(function_name, obj) if target
       
       # if we do not find any target, just write it on STDERR
-      STDERR.send(function_name, str)
+      STDERR.send(function_name, obj)
     end
   end
   # replace Ruby's standard output

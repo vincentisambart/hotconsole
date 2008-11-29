@@ -5,9 +5,8 @@ framework 'webkit'
 include HotCocoa
 
 # TODO:
-# - stdin
-# - do not perform_action if the code typed is not finished (needs a simple lexer)
-# - puts [1, 2] or puts 1, 2 and print [1, 2] do not work like in normal Ruby (but write is OK)
+# - stdin (should not be very hard but it's used only very rarely so very low priority)
+# - do not perform_action if the code typed is not finished (needs a basic lexer)
 # - maybe always displays puts/writes before the prompt?
 $terminals = []
 
@@ -182,7 +181,13 @@ Shortcuts:
     document.body.appendChild(element)
   end
   
-  def write(text)
+  def write(obj)
+    if obj.respond_to?(:to_str)
+      text = obj
+    else
+      text = obj.to_s
+    end
+
     if @window_closed
       # if the window was closed while code that printed text was still running,
       # the text is displayed on the most recently used terminal if there is one,
@@ -199,12 +204,15 @@ Shortcuts:
   end
   
   # puts is just a write of the text followed by a carriage return and that returns nil
-  def puts(text)
-    # we do not call just write("#{text}\n") because of encoding problems
-    # and bugs in string concatenation
-    # note also that Ruby itself also does it in two calls to write
-    write text
-    write "\n"
+  def puts(obj)
+    if obj.respond_to?(:to_ary)
+      obj.each { |elem| puts elem }
+    else
+      # we do not call just write because of encoding/string problems
+      # and because Ruby itself does it in two calls to write
+      write obj
+      write "\n"
+    end
   end
 
   def scroll_to_bottom
