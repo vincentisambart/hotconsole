@@ -10,6 +10,8 @@ include HotCocoa
 # - when closing the application, if code is running, ask for what to do (cancel, kill and close all)
 # - add an help message in the windows when they are opened
 # - puts [1, 2] or puts 1, 2 and print [1, 2] do not work like in normal Ruby (but write is OK)
+# - if we do not find the stdout target for the thread (or maybe only if we are in the main thread)
+#   but a _terminal_ window is still opened, write in this window (try the terminal the most on the front)
 
 class Terminal
   def base_html
@@ -42,7 +44,7 @@ class Terminal
     @eval_thread.kill_running_threads if return_code == NSAlertFirstButtonReturn # kill the running code if asked
   end
   
-  def windowShouldClose win
+  def should_close?
     return true if command_line and not @eval_thread.children_threads_running?
     alert = NSAlert.alloc.init
     alert.messageText = "Some code is still running in this console.\nDo you really want to close it?"
@@ -70,7 +72,7 @@ class Terminal
     window :frame => frame, :title => "HotConsole" do |win|
       @window = win
       @window_closed = false
-      @window.delegate = self # for windowShouldClose
+      @window.should_close? { self.should_close? }
       @window.contentView.margin = 0
       @web_view = web_view(:layout => {:expand => [:width, :height]})
       clear
