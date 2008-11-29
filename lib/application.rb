@@ -7,8 +7,8 @@ include HotCocoa
 # TODO:
 # - stdin
 # - do not perform_action if the code typed is not finished (needs a simple lexer)
-# - when closing the application, if code is running, ask for what to do (cancel, kill and close all)
 # - puts [1, 2] or puts 1, 2 and print [1, 2] do not work like in normal Ruby (but write is OK)
+# - maybe always displays puts/writes before the prompt?
 $terminals = []
 
 class Terminal
@@ -68,12 +68,11 @@ class Terminal
       frame[0] = w.frame.origin.x + 20
       frame[1] = w.frame.origin.y - 20
     end
-    @window = window :frame => frame, :title => "HotConsole" do |win|
-      @window_closed = false
+    @window = window(:frame => frame, :title => "HotConsole") do |win|
       win.should_close? { self.should_close? }
       win.will_close {
         $terminals.delete(self)
-        @window_closed = true        
+        @window_closed = true
       }
       win.did_become_main {
         # we want order in $terminals to be
@@ -92,6 +91,7 @@ class Terminal
       attr_accessor :terminal
     end
     @window.terminal = self
+    @window_closed = false
     $terminals << self
   end
   
@@ -297,7 +297,7 @@ class Application
   
   def on_clear(sender)
     w = NSApp.mainWindow
-    if w
+    if w and w.respond_to?(:terminal)
       w.terminal.clear
     else
       NSBeep()
