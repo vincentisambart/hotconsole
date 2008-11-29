@@ -8,7 +8,6 @@ include HotCocoa
 # - stdin
 # - do not perform_action if the code typed is not finished (needs a simple lexer)
 # - when closing the application, if code is running, ask for what to do (cancel, kill and close all)
-# - add an help message in the windows when they are opened
 # - puts [1, 2] or puts 1, 2 and print [1, 2] do not work like in normal Ruby (but write is OK)
 # - if we do not find the stdout target for the thread (or maybe only if we are in the main thread)
 #   but a _terminal_ window is still opened, write in this window (try the terminal the most on the front)
@@ -69,32 +68,52 @@ class Terminal
       frame[0] = w.frame.origin.x + 20
       frame[1] = w.frame.origin.y - 20
     end
-    window :frame => frame, :title => "HotConsole" do |win|
-      @window = win
+    @window = window :frame => frame, :title => "HotConsole" do |win|
       @window_closed = false
-      @window.should_close? { self.should_close? }
-      @window.contentView.margin = 0
+      win.should_close? { self.should_close? }
+      win.contentView.margin = 0
       @web_view = web_view(:layout => {:expand => [:width, :height]})
-      clear
       @web_view.editingDelegate = self # for webView:doCommandBySelector:
       @web_view.frameLoadDelegate = self # for webView:didFinishLoadForFrame:
-      @window << @web_view
+      @web_view.mainFrame.loadHTMLString base_html, baseURL: nil
+      win << @web_view
     end
+    class << @window
+      attr_accessor :terminal
+    end
+    @window.terminal = self
+  end
+  
+  def display_intro_message
+    write <<-END_MESSAGE
+Welcome to HotConsole!
+Shortcuts:
+- Alt+Up/Down to navigate in the history
+- Alt+Enter to type text on multiple lines
+- Command+K to clean up the terminal
+    END_MESSAGE
+  end
+  
+  def empty_body
+    document.body.innerHTML = ''
   end
   
   def clear
     if command_line
       @next_prompt_command = command_line.innerText
+      empty_body
+      write_prompt
     else
       @next_prompt_command = nil
+      empty_body
     end
-    @web_view.mainFrame.loadHTMLString base_html, baseURL:nil
   end
 
   def webView view, didFinishLoadForFrame: frame
     # we must be sure the body is really empty because of the preservation of white spaces
     # we can easily have a carriage return left in the HTML
-    document.body.innerHTML = ''
+    empty_body
+    display_intro_message
     write_prompt
   end
   
@@ -266,14 +285,7 @@ class Application
   def on_clear(sender)
     w = NSApp.mainWindow
     if w
-      terminal = w.delegate
-      # the user can't clear the window
-      # if some code is still executing
-      if terminal.command_line
-        terminal.clear
-      else
-        NSBeep()
-      end
+      w.terminal.clear
     else
       NSBeep()
     end
