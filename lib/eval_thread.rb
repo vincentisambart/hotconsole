@@ -61,6 +61,10 @@ class EvalThread
         end
       end
       
+      # if we still do not have any target, try to get the most recently used and opened terminal
+      target = $terminals.last
+      return send_text.call if target
+      
       # if we do not find any target, just write it on STDERR
       STDERR.send(function_name, str)
     end

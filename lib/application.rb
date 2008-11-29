@@ -9,8 +9,7 @@ include HotCocoa
 # - do not perform_action if the code typed is not finished (needs a simple lexer)
 # - when closing the application, if code is running, ask for what to do (cancel, kill and close all)
 # - puts [1, 2] or puts 1, 2 and print [1, 2] do not work like in normal Ruby (but write is OK)
-# - if we do not find the stdout target for the thread (or maybe only if we are in the main thread)
-#   but a _terminal_ window is still opened, write in this window (try the terminal the most on the front)
+$terminals = []
 
 class Terminal
   def base_html
@@ -38,13 +37,14 @@ class Terminal
     @eval_thread.end_thread
     
     @window.close
-    @window_closed = true
     
     @eval_thread.kill_running_threads if return_code == NSAlertFirstButtonReturn # kill the running code if asked
   end
   
   def should_close?
+    # we can always close directly is nothing is running
     return true if command_line and not @eval_thread.children_threads_running?
+    
     alert = NSAlert.alloc.init
     alert.messageText = "Some code is still running in this console.\nDo you really want to close it?"
     alert.alertStyle = NSCriticalAlertStyle
@@ -71,6 +71,16 @@ class Terminal
     @window = window :frame => frame, :title => "HotConsole" do |win|
       @window_closed = false
       win.should_close? { self.should_close? }
+      win.will_close {
+        $terminals.delete(self)
+        @window_closed = true        
+      }
+      win.did_become_main {
+        # we want order in $terminals to be
+        # last used terminal to most recent used
+        $terminals.delete(self)
+        $terminals << self
+      }
       win.contentView.margin = 0
       @web_view = web_view(:layout => {:expand => [:width, :height]})
       @web_view.editingDelegate = self # for webView:doCommandBySelector:
@@ -82,6 +92,7 @@ class Terminal
       attr_accessor :terminal
     end
     @window.terminal = self
+    $terminals << self
   end
   
   def display_intro_message
@@ -174,8 +185,10 @@ Shortcuts:
   def write(text)
     if @window_closed
       # if the window was closed while code that printed text was still running,
-      # the text is displayed on the standard error output
-      STDERR.write(text)
+      # the text is displayed on the most recently used terminal if there is one,
+      # or the standard error output if no terminal was found
+      target = $terminals.last || STDERR
+      target.write(text)
     else
       # if the window is still opened, just put the text
       # in a DOM span element and writes it on the WebView
