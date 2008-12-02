@@ -27,6 +27,9 @@ module HotCocoa
         edit.item :paste, :key => "v", :action => "paste:"
       end
       main.submenu :view do |view|
+        view.item :bigger, :key => "+", :modifiers => [:command], :action => "makeTextLarger:"
+        view.item :smaller, :key => "-", :modifiers => [:command], :action => "makeTextSmaller:"
+        view.separator
         view.item :clear, :key => "k", :modifiers => [:command]
       end
       main.submenu :window do |win|
