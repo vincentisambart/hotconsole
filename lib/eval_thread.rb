@@ -20,7 +20,7 @@ class EvalThread
     # a standard output object has only one mandatory method: write.
     # it generally returns the number of characters written
     def write(obj)
-      if obj.respond_to?(:str)
+      if obj.respond_to?(:to_str)
         str = obj
       else
         str = obj.to_s
