@@ -1,7 +1,7 @@
 require 'lib/eval_thread' # for EvalThread and standard output redirection
 
 require 'hotcocoa'
-framework 'webkit'
+framework 'WebKit'
 include HotCocoa
 
 # TODO:
