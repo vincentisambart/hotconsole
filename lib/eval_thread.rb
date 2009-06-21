@@ -108,6 +108,7 @@ class EvalThread
     @target = target
     @queue_for_commands = Queue.new
     @binding = TOPLEVEL_BINDING.dup
+    @underscore_assigner = eval("_ = nil; proc { |val| _ = val }", @binding)
     @thread = Thread.new { run }
   end
 
@@ -117,15 +118,6 @@ class EvalThread
   def back_from_eval(text)
     @target.send_on_main_thread :back_from_eval, text
   end
-  
-  
-  UNDERSCORE_ASSIGNMENT = '_ = begin %s end'.freeze
-  
-  def add_underscore_assignment(command)
-    UNDERSCORE_ASSIGNMENT % command
-  end
-  
-  # TODO: take out underscore assignment from error messages?
 
   def run
     # create a new ThreadGroup and sets it as the group for the current thread.
@@ -150,7 +142,8 @@ class EvalThread
       eval_line = -1
       begin
         # eval_line must have exactly the line number where the eval call occurs
-        eval_line = __LINE__; value = eval(add_underscore_assignment(command), @binding, 'hotconsole', line_num)
+        eval_line = __LINE__; value = eval(command, @binding, 'hotconsole', line_num)
+        @underscore_assigner.call(value)
         back_from_eval "=> #{value.inspect}\n"
       rescue Exception => e
         backtrace = e.backtrace
