@@ -1,11 +1,4 @@
-USE_THREADS = (MACRUBY_VERSION != 0.5)
-if USE_THREADS
-  require 'lib/eval_thread' # for EvalThread and standard output redirection
-else
-  # MacRuby 0.5 currently does not support threads
-  require 'lib/eval_no_thread'
-end
-
+require 'lib/eval_thread' # for EvalThread and standard output redirection
 require 'hotcocoa'
 framework 'WebKit'
 include HotCocoa
@@ -273,7 +266,7 @@ Shortcuts:
     @eval_thread.send_command(current_line_number, command)
     # the user must not be able to modify the prompt until the command ends
     # (when back_from_eval is called)
-    end_edition if USE_THREADS
+    end_edition
   end
 
   # back_from_eval is called when the evaluation thread has finished its evaluation of the given code
