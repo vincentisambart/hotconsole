@@ -155,6 +155,7 @@ Shortcuts:
   
   # callback called when a command by selector is run on the WebView
   def webView webView, doCommandBySelector: command
+    command = command.to_s
     if command == 'insertNewline:' # Return
       perform_action
     elsif command == 'moveBackward:' # Alt+Up Arrow
